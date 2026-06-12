@@ -1,7 +1,9 @@
 name: Build windows
 
+# Note (surface-slicing fork): push trigger disabled — this reusable
+# workflow needs Prusa's internal secrets and fails on forks. Use
+# build_surface_slicing.yml instead; this one stays manual-only.
 on:
-  push:
   workflow_dispatch:
     inputs:
       create_pdb:

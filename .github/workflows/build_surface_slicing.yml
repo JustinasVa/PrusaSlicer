@@ -1,0 +1,62 @@
+name: Build Windows portable (surface-slicing fork)
+
+# Self-contained build that runs entirely on GitHub-hosted runners —
+# no secrets, no private reusable workflows, works on any fork.
+# First run compiles all dependencies (~2-3 h); afterwards they come
+# from the cache and a build takes well under an hour.
+
+on:
+  push:
+    branches: [ surface-slicing ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-2022
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache dependencies
+        id: cache-deps
+        uses: actions/cache@v4
+        with:
+          path: deps/build/destdir
+          key: deps-win64-vs2022-${{ hashFiles('deps/CMakeLists.txt', 'deps/**/*.cmake') }}
+
+      - name: Build dependencies (Release only)
+        if: steps.cache-deps.outputs.cache-hit != 'true'
+        shell: cmd
+        run: |
+          cd deps
+          mkdir build
+          cd build
+          cmake .. -G "Visual Studio 17 2022" -A x64 -DDEP_DEBUG=OFF
+          cmake --build . --config Release
+
+      - name: Configure PrusaSlicer
+        shell: cmd
+        run: |
+          mkdir build
+          cd build
+          cmake .. -G "Visual Studio 17 2022" -A x64 -DCMAKE_PREFIX_PATH=%GITHUB_WORKSPACE%\deps\build\destdir\usr\local
+
+      - name: Build PrusaSlicer
+        shell: cmd
+        run: |
+          cd build
+          cmake --build . --config Release -- /m
+
+      - name: Package portable app
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory portable | Out-Null
+          Copy-Item build/src/Release/* portable/ -Recurse
+          Copy-Item resources portable/resources -Recurse
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: PrusaSlicer-surface-slicing-win64
+          path: portable
+          retention-days: 30
