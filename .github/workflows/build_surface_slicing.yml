@@ -50,10 +50,13 @@ jobs:
 
       - name: Configure PrusaSlicer
         shell: cmd
+        # CMAKE_CONFIGURATION_TYPES=Release: deps are built Release-only
+        # (DEP_DEBUG=OFF) and the bundled FindOpenVDB.cmake requires a debug
+        # openvdb lib whenever "Debug" is among the configured types on MSVC.
         run: |
           mkdir build
           cd build
-          cmake .. -G "Visual Studio 17 2022" -A x64 -DCMAKE_PREFIX_PATH=%GITHUB_WORKSPACE%\deps\build\destdir\usr\local -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+          cmake .. -G "Visual Studio 17 2022" -A x64 -DCMAKE_CONFIGURATION_TYPES=Release -DCMAKE_PREFIX_PATH=%GITHUB_WORKSPACE%\deps\build\destdir\usr\local -DCMAKE_POLICY_VERSION_MINIMUM=3.5
 
       - name: Build PrusaSlicer
         shell: cmd
