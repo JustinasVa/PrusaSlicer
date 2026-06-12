@@ -48,21 +48,45 @@ jobs:
           path: deps/build/destdir
           key: deps-win64-vs2022-${{ hashFiles('deps/CMakeLists.txt', 'deps/**/*.cmake') }}
 
+      - name: Inspect deps destdir
+        shell: pwsh
+        # Publish what the deps actually installed as a notice annotation —
+        # annotations are readable via the public API, full logs are not.
+        run: |
+          $lib = Join-Path $env:GITHUB_WORKSPACE 'deps\build\destdir\usr\local\lib'
+          $names = (Get-ChildItem $lib -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Name) -join ', '
+          if (-not $names) { $names = "(lib dir missing at $lib)" }
+          if ($names.Length -gt 3200) { $names = $names.Substring(0, 3200) + ' ...' }
+          Write-Output "::notice title=deps lib dir::$names"
+
       - name: Configure PrusaSlicer
-        shell: cmd
+        shell: pwsh
         # CMAKE_CONFIGURATION_TYPES=Release: deps are built Release-only
         # (DEP_DEBUG=OFF) and the bundled FindOpenVDB.cmake requires a debug
         # openvdb lib whenever "Debug" is among the configured types on MSVC.
+        # On failure the log tail is published as an error annotation.
         run: |
-          mkdir build
-          cd build
-          cmake .. -G "Visual Studio 17 2022" -A x64 -DCMAKE_CONFIGURATION_TYPES=Release -DCMAKE_PREFIX_PATH=%GITHUB_WORKSPACE%\deps\build\destdir\usr\local -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+          New-Item -ItemType Directory build -Force | Out-Null
+          Set-Location build
+          cmake .. -G "Visual Studio 17 2022" -A x64 -DCMAKE_CONFIGURATION_TYPES=Release "-DCMAKE_PREFIX_PATH=$env:GITHUB_WORKSPACE\deps\build\destdir\usr\local" -DCMAKE_POLICY_VERSION_MINIMUM=3.5 *>&1 | Tee-Object -FilePath configure.log
+          if ($LASTEXITCODE -ne 0) {
+            $tail = ((Get-Content configure.log -Tail 60) -join '%0A') -replace "`r", ''
+            if ($tail.Length -gt 3500) { $tail = $tail.Substring($tail.Length - 3500) }
+            Write-Output "::error title=CMake configure failed (log tail)::$tail"
+            exit 1
+          }
 
       - name: Build PrusaSlicer
-        shell: cmd
+        shell: pwsh
         run: |
-          cd build
-          cmake --build . --config Release -- /m
+          Set-Location build
+          cmake --build . --config Release -- /m *>&1 | Tee-Object -FilePath build.log
+          if ($LASTEXITCODE -ne 0) {
+            $errs = (Select-String -Path build.log -Pattern 'error [A-Z]+[0-9]+|CMake Error|: error' | Select-Object -First 25 | ForEach-Object Line) -join '%0A'
+            if ($errs.Length -gt 3500) { $errs = $errs.Substring(0, 3500) }
+            Write-Output "::error title=Compile errors (first 25)::$errs"
+            exit 1
+          }
 
       - name: Package portable app
         shell: pwsh
