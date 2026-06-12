@@ -1,7 +1,8 @@
 name: Build flatpak
 
+# Note (surface-slicing fork): push trigger disabled — needs Prusa-internal
+# secrets, fails on forks. Manual dispatch only.
 on:
-  push:
   workflow_dispatch:
 
 jobs:
