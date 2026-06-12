@@ -28,6 +28,7 @@
 #include "ExtrusionEntity.hpp"
 #include "ExtrusionEntityCollection.hpp"
 #include "Feature/FuzzySkin/FuzzySkin.hpp"
+#include "Feature/SurfaceSlicing/SurfaceSlicing.hpp"
 #include "Point.hpp"
 #include "Polygon.hpp"
 #include "Polyline.hpp"
@@ -201,7 +202,7 @@ public:
 
 using PerimeterGeneratorLoops = std::vector<PerimeterGeneratorLoop>;
 
-static ExtrusionEntityCollection traverse_loops_classic(const PerimeterGenerator::Parameters &params, const Polygons &lower_slices_polygons_cache, const PerimeterGeneratorLoops &loops, ThickPolylines &thin_walls)
+static ExtrusionEntityCollection traverse_loops_classic(const PerimeterGenerator::Parameters &params, const Polygons &lower_slices_polygons_cache, const PerimeterGeneratorLoops &loops, ThickPolylines &thin_walls, Polygons &out_ss_keepout)
 {
     using namespace Slic3r::Feature::FuzzySkin;
 
@@ -224,8 +225,11 @@ static ExtrusionEntityCollection traverse_loops_classic(const PerimeterGenerator
             loop_role = elrDefault;
         }
 
-        // Apply fuzzy skin if it is enabled for at least some part of the polygon.
-        const Polygon polygon = apply_fuzzy_skin(loop.polygon, params.config, params.perimeter_regions, params.layer_id, loop.depth, loop.is_contour);
+        // Apply fuzzy skin if it is enabled for at least some part of the polygon,
+        // then the surface-slicing wall texture (inward window dips) on top of it.
+        const Polygon polygon = Slic3r::Feature::SurfaceSlicing::apply_surface_slicing(
+            apply_fuzzy_skin(loop.polygon, params.config, params.perimeter_regions, params.layer_id, loop.depth, loop.is_contour),
+            params.config, params.layer_id, loop.depth, loop.is_contour, out_ss_keepout);
 
         ExtrusionPaths paths;
         if (params.config.overhangs && params.layer_id > params.object_config.raft_layers &&
@@ -304,7 +308,7 @@ static ExtrusionEntityCollection traverse_loops_classic(const PerimeterGenerator
         } else {
             const PerimeterGeneratorLoop &loop = loops[idx.first];
             assert(thin_walls.empty());
-            ExtrusionEntityCollection children = traverse_loops_classic(params, lower_slices_polygons_cache, loop.children, thin_walls);
+            ExtrusionEntityCollection children = traverse_loops_classic(params, lower_slices_polygons_cache, loop.children, thin_walls, out_ss_keepout);
             out.entities.reserve(out.entities.size() + children.entities.size() + 1);
             ExtrusionLoop *eloop = static_cast<ExtrusionLoop*>(coll.entities[idx.first]);
             coll.entities[idx.first] = nullptr;
@@ -419,7 +423,7 @@ static ClipperLib_Z::Paths clip_extrusion(const ClipperLib_Z::Path &subject, con
     return clipped_paths;
 }
 
-static ExtrusionEntityCollection traverse_extrusions(const PerimeterGenerator::Parameters &params, const Polygons &lower_slices_polygons_cache, Arachne::PerimeterOrder::PerimeterExtrusions &pg_extrusions)
+static ExtrusionEntityCollection traverse_extrusions(const PerimeterGenerator::Parameters &params, const Polygons &lower_slices_polygons_cache, Arachne::PerimeterOrder::PerimeterExtrusions &pg_extrusions, Polygons &out_ss_keepout)
 {
     using namespace Slic3r::Feature::FuzzySkin;
 
@@ -433,8 +437,10 @@ static ExtrusionEntityCollection traverse_extrusions(const PerimeterGenerator::P
         ExtrusionRole role_normal   = is_external ? ExtrusionRole::ExternalPerimeter : ExtrusionRole::Perimeter;
         ExtrusionRole role_overhang = role_normal | ExtrusionRoleModifier::Bridge;
 
-        // Apply fuzzy skin if it is enabled for at least some part of the ExtrusionLine.
+        // Apply fuzzy skin if it is enabled for at least some part of the ExtrusionLine,
+        // then the surface-slicing wall texture (inward window dips) on top of it.
         extrusion = apply_fuzzy_skin(extrusion, params.config, params.perimeter_regions, params.layer_id, pg_extrusion.extrusion.inset_idx, !pg_extrusion.extrusion.is_closed || pg_extrusion.is_contour());
+        extrusion = Slic3r::Feature::SurfaceSlicing::apply_surface_slicing(extrusion, params.config, params.layer_id, pg_extrusion.extrusion.inset_idx, pg_extrusion.is_contour(), out_ss_keepout);
 
         ExtrusionPaths paths;
         // detect overhanging/bridging perimeters
@@ -1123,7 +1129,8 @@ void PerimeterGenerator::process_arachne(
 
     Arachne::PerimeterOrder::PerimeterExtrusions ordered_extrusions = Arachne::PerimeterOrder::ordered_perimeter_extrusions(perimeters, params.config.external_perimeters_first);
 
-    if (ExtrusionEntityCollection extrusion_coll = traverse_extrusions(params, lower_slices_polygons_cache, ordered_extrusions); !extrusion_coll.empty())
+    Polygons ss_keepout;
+    if (ExtrusionEntityCollection extrusion_coll = traverse_extrusions(params, lower_slices_polygons_cache, ordered_extrusions, ss_keepout); !extrusion_coll.empty())
         out_loops.append(extrusion_coll);
 
     const coord_t spacing = (perimeters.size() == 1) ? ext_perimeter_spacing2 : perimeter_spacing;
@@ -1173,7 +1180,13 @@ void PerimeterGenerator::process_arachne(
             infill_areas = diff_ex(infill_areas, filled_area);
         }
     }
-    
+
+    // Surface slicing: keep infill out of the window recesses so it does not
+    // show through; the dipped wall line still lands on the zone boundary,
+    // fusing with the infill it meets there.
+    if (!ss_keepout.empty())
+        infill_areas = diff_ex(infill_areas, ss_keepout);
+
     append(out_fill_expolygons, std::move(infill_areas));
 }
 
@@ -1193,6 +1206,10 @@ void PerimeterGenerator::process_classic(
     // Infills without the gap fills
     ExPolygons                 &out_fill_expolygons)
 {
+    // Surface slicing: keep-out window zones collected while traversing the
+    // external perimeters; subtracted from the infill area at the end.
+    Polygons ss_keepout;
+
     // other perimeters
     coord_t perimeter_width         = params.perimeter_flow.scaled_width();
     coord_t perimeter_spacing       = params.perimeter_flow.scaled_spacing();
@@ -1448,7 +1465,7 @@ void PerimeterGenerator::process_classic(
             }
         }
         // at this point, all loops should be in contours[0]
-        ExtrusionEntityCollection entities = traverse_loops_classic(params, lower_slices_polygons_cache, contours.front(), thin_walls);
+        ExtrusionEntityCollection entities = traverse_loops_classic(params, lower_slices_polygons_cache, contours.front(), thin_walls, ss_keepout);
         // if brim will be printed, reverse the order of perimeters so that
         // we continue inwards after having finished the brim
         // TODO: add test for perimeter order
@@ -1541,7 +1558,13 @@ void PerimeterGenerator::process_classic(
             infill_areas = diff_ex(infill_areas, filled_area);
         }
     }
-    
+
+    // Surface slicing: keep infill out of the window recesses so it does not
+    // show through; the dipped wall line still lands on the zone boundary,
+    // fusing with the infill it meets there.
+    if (!ss_keepout.empty())
+        infill_areas = diff_ex(infill_areas, ss_keepout);
+
     append(out_fill_expolygons, std::move(infill_areas));
 }
 
@@ -1555,7 +1578,14 @@ bool PerimeterRegion::has_compatible_perimeter_regions(const PrintRegionConfig &
 {
     return config.fuzzy_skin            == other_config.fuzzy_skin &&
            config.fuzzy_skin_thickness  == other_config.fuzzy_skin_thickness &&
-           config.fuzzy_skin_point_dist == other_config.fuzzy_skin_point_dist;
+           config.fuzzy_skin_point_dist == other_config.fuzzy_skin_point_dist &&
+           config.surface_slicing              == other_config.surface_slicing &&
+           config.surface_slicing_hole_width   == other_config.surface_slicing_hole_width &&
+           config.surface_slicing_hole_spacing == other_config.surface_slicing_hole_spacing &&
+           config.surface_slicing_hole_depth   == other_config.surface_slicing_hole_depth &&
+           config.surface_slicing_hole_layers  == other_config.surface_slicing_hole_layers &&
+           config.surface_slicing_solid_layers == other_config.surface_slicing_solid_layers &&
+           config.surface_slicing_stagger      == other_config.surface_slicing_stagger;
 }
 
 void PerimeterRegion::merge_compatible_perimeter_regions(PerimeterRegions &perimeter_regions)

@@ -97,6 +97,8 @@ set(SLIC3R_SOURCES
     FileParserError.hpp
     Feature/FuzzySkin/FuzzySkin.cpp
     Feature/FuzzySkin/FuzzySkin.hpp
+    Feature/SurfaceSlicing/SurfaceSlicing.cpp
+    Feature/SurfaceSlicing/SurfaceSlicing.hpp
     Fill/Fill.cpp
     Fill/Fill3DHoneycomb.cpp
     Fill/Fill3DHoneycomb.hpp

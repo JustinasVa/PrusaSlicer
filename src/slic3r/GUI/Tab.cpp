@@ -1498,6 +1498,15 @@ void TabPrint::build()
         optgroup->append_single_option_line("fuzzy_skin_thickness", category_path + "fuzzy-skin-thickness");
         optgroup->append_single_option_line("fuzzy_skin_point_dist", category_path + "fuzzy-skin-point-distance");
 
+        optgroup = page->new_optgroup(L("Surface slicing (experimental)"));
+        optgroup->append_single_option_line("surface_slicing");
+        optgroup->append_single_option_line("surface_slicing_hole_width");
+        optgroup->append_single_option_line("surface_slicing_hole_spacing");
+        optgroup->append_single_option_line("surface_slicing_hole_depth");
+        optgroup->append_single_option_line("surface_slicing_hole_layers");
+        optgroup->append_single_option_line("surface_slicing_solid_layers");
+        optgroup->append_single_option_line("surface_slicing_stagger");
+
         optgroup = page->new_optgroup(L("Only one perimeter"));
         category_path = "layers-and-perimeters_1748/#";
         optgroup->append_single_option_line("top_one_perimeter_type", category_path + "top-one-perimeter-type");

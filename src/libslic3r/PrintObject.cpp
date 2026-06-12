@@ -887,6 +887,13 @@ bool PrintObject::invalidate_state_by_config_options(
             || opt_key == "fuzzy_skin"
             || opt_key == "fuzzy_skin_thickness"
             || opt_key == "fuzzy_skin_point_dist"
+            || opt_key == "surface_slicing"
+            || opt_key == "surface_slicing_hole_width"
+            || opt_key == "surface_slicing_hole_spacing"
+            || opt_key == "surface_slicing_hole_depth"
+            || opt_key == "surface_slicing_hole_layers"
+            || opt_key == "surface_slicing_solid_layers"
+            || opt_key == "surface_slicing_stagger"
             || opt_key == "overhangs"
             || opt_key == "thin_walls"
             || opt_key == "thick_bridges") {
@@ -2692,6 +2699,10 @@ PrintRegionConfig region_config_from_model_volume(const PrintRegionConfig &defau
         config.fill_density.value = std::min(config.fill_density.value, 100.);
     if (config.fuzzy_skin.value != FuzzySkinType::None && (config.fuzzy_skin_point_dist.value < 0.01 || config.fuzzy_skin_thickness.value < 0.001))
         config.fuzzy_skin.value = FuzzySkinType::None;
+    if (config.surface_slicing.value != SurfaceSlicingType::None &&
+        (config.surface_slicing_hole_width.value < 0.1 || config.surface_slicing_hole_spacing.value < 0.1 ||
+         config.surface_slicing_hole_depth.value < 0.05 || config.surface_slicing_hole_layers.value < 1))
+        config.surface_slicing.value = SurfaceSlicingType::None;
     return config;
 }
 

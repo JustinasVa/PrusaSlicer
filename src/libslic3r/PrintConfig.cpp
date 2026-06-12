@@ -127,6 +127,13 @@ static const t_config_enum_values s_keys_map_FuzzySkinType {
 };
 CONFIG_OPTION_ENUM_DEFINE_STATIC_MAPS(FuzzySkinType)
 
+static const t_config_enum_values s_keys_map_SurfaceSlicingType {
+    { "none",           int(SurfaceSlicingType::None) },
+    { "external",       int(SurfaceSlicingType::External) },
+    { "all",            int(SurfaceSlicingType::All) }
+};
+CONFIG_OPTION_ENUM_DEFINE_STATIC_MAPS(SurfaceSlicingType)
+
 static const t_config_enum_values s_keys_map_InfillPattern {
     { "rectilinear",        ipRectilinear },
     { "monotonic",          ipMonotonic },
@@ -1780,6 +1787,75 @@ void PrintConfigDef::init_fff_params()
     def->min = 0;
     def->mode = comAdvanced;
     def->set_default_value(new ConfigOptionFloat(0.8));
+
+    def = this->add("surface_slicing", coEnum);
+    def->label = L("Surface slicing");
+    def->category = L("Surface Slicing");
+    def->tooltip = L("Give walls a breathable, knitted-fabric-like texture: a checkerboard of "
+                     "window recesses where the external perimeter dips inward and fuses with "
+                     "the infill, while staying one continuous extrusion line. Works with any "
+                     "infill pattern; use 1 perimeter and at least 10-15% infill density.");
+    def->set_enum<SurfaceSlicingType>({
+        { "none",       L("None") },
+        { "external",   L("Outside walls") },
+        { "all",        L("All walls") }
+    });
+    def->mode = comSimple;
+    def->set_default_value(new ConfigOptionEnum<SurfaceSlicingType>(SurfaceSlicingType::None));
+
+    def = this->add("surface_slicing_hole_width", coFloat);
+    def->label = L("Window width");
+    def->category = L("Surface Slicing");
+    def->tooltip = L("Length of each window opening along the wall.");
+    def->sidetext = L("mm");
+    def->min = 0.1;
+    def->mode = comAdvanced;
+    def->set_default_value(new ConfigOptionFloat(2.0));
+
+    def = this->add("surface_slicing_hole_spacing", coFloat);
+    def->label = L("Window spacing");
+    def->category = L("Surface Slicing");
+    def->tooltip = L("Solid wall length between two windows.");
+    def->sidetext = L("mm");
+    def->min = 0.1;
+    def->mode = comAdvanced;
+    def->set_default_value(new ConfigOptionFloat(2.0));
+
+    def = this->add("surface_slicing_hole_depth", coFloat);
+    def->label = L("Window depth");
+    def->category = L("Surface Slicing");
+    def->tooltip = L("How far the wall line detours inward in window sections, hiding behind "
+                     "the surface and fusing with the infill.");
+    def->sidetext = L("mm");
+    def->min = 0.05;
+    def->mode = comAdvanced;
+    def->set_default_value(new ConfigOptionFloat(0.8));
+
+    def = this->add("surface_slicing_hole_layers", coInt);
+    def->label = L("Patterned layers");
+    def->category = L("Surface Slicing");
+    def->tooltip = L("Number of consecutive layers with window dips in each repeating band.");
+    def->min = 1;
+    def->mode = comAdvanced;
+    def->set_default_value(new ConfigOptionInt(2));
+
+    def = this->add("surface_slicing_solid_layers", coInt);
+    def->label = L("Solid layers between bands");
+    def->category = L("Surface Slicing");
+    def->tooltip = L("Number of full, smooth perimeter layers between two patterned bands.");
+    def->min = 0;
+    def->mode = comAdvanced;
+    def->set_default_value(new ConfigOptionInt(1));
+
+    def = this->add("surface_slicing_stagger", coFloat);
+    def->label = L("Band stagger");
+    def->category = L("Surface Slicing");
+    def->tooltip = L("Phase shift between consecutive bands as a fraction of the window "
+                     "period; 0.5 produces a checkerboard.");
+    def->min = 0;
+    def->max = 1;
+    def->mode = comAdvanced;
+    def->set_default_value(new ConfigOptionFloat(0.5));
 
     def = this->add("gap_fill_enabled", coBool);
     def->label = L("Fill gaps");

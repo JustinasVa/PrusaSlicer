@@ -101,6 +101,14 @@ enum class FuzzySkinType {
     All,
 };
 
+// Surface Slicing: fabric-like wall texture — a checkerboard of window
+// recesses where the external perimeter dips inward and fuses with infill.
+enum class SurfaceSlicingType {
+    None,
+    External,
+    All,
+};
+
 enum InfillPattern : int {
     ipRectilinear, ipMonotonic, ipMonotonicLines, ipAlignedRectilinear, ipGrid, ipTriangles, ipStars, ipCubic, ipLine, ipConcentric, ipHoneycomb, ip3DHoneycomb,
     ipGyroid, ipHilbertCurve, ipArchimedeanChords, ipOctagramSpiral, ipAdaptiveCubic, ipSupportCubic, ipSupportBase,
@@ -290,6 +298,7 @@ CONFIG_OPTION_ENUM_DECLARE_STATIC_MAPS(MachineLimitsUsage)
 CONFIG_OPTION_ENUM_DECLARE_STATIC_MAPS(PrintHostType)
 CONFIG_OPTION_ENUM_DECLARE_STATIC_MAPS(AuthorizationType)
 CONFIG_OPTION_ENUM_DECLARE_STATIC_MAPS(FuzzySkinType)
+CONFIG_OPTION_ENUM_DECLARE_STATIC_MAPS(SurfaceSlicingType)
 CONFIG_OPTION_ENUM_DECLARE_STATIC_MAPS(InfillPattern)
 CONFIG_OPTION_ENUM_DECLARE_STATIC_MAPS(IroningType)
 CONFIG_OPTION_ENUM_DECLARE_STATIC_MAPS(SlicingMode)
@@ -763,6 +772,13 @@ PRINT_CONFIG_CLASS_DEFINE(
     ((ConfigOptionEnum<FuzzySkinType>,  fuzzy_skin))
     ((ConfigOptionFloat,                fuzzy_skin_thickness))
     ((ConfigOptionFloat,                fuzzy_skin_point_dist))
+    ((ConfigOptionEnum<SurfaceSlicingType>, surface_slicing))
+    ((ConfigOptionFloat,                surface_slicing_hole_width))
+    ((ConfigOptionFloat,                surface_slicing_hole_spacing))
+    ((ConfigOptionFloat,                surface_slicing_hole_depth))
+    ((ConfigOptionInt,                  surface_slicing_hole_layers))
+    ((ConfigOptionInt,                  surface_slicing_solid_layers))
+    ((ConfigOptionFloat,                surface_slicing_stagger))
     ((ConfigOptionBool,                 gap_fill_enabled))
     ((ConfigOptionFloat,                gap_fill_speed))
     ((ConfigOptionFloatOrPercent,       infill_anchor))
