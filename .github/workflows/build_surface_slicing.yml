@@ -2,8 +2,9 @@ name: Build Windows portable (surface-slicing fork)
 
 # Self-contained build that runs entirely on GitHub-hosted runners —
 # no secrets, no private reusable workflows, works on any fork.
-# First run compiles all dependencies (~2-3 h); afterwards they come
-# from the cache and a build takes well under an hour.
+# First run compiles all dependencies (~1.5 h); afterwards they come
+# from the cache (saved even if a later step fails) and a build takes
+# well under an hour.
 
 on:
   push:
@@ -17,12 +18,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Cache dependencies
+      - name: Restore dependency cache
         id: cache-deps
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: deps/build/destdir
           key: deps-win64-vs2022-${{ hashFiles('deps/CMakeLists.txt', 'deps/**/*.cmake') }}
+
+      - name: Tool versions
+        shell: cmd
+        run: cmake --version
 
       - name: Build dependencies (Release only)
         if: steps.cache-deps.outputs.cache-hit != 'true'
@@ -31,15 +36,24 @@ jobs:
           cd deps
           mkdir build
           cd build
-          cmake .. -G "Visual Studio 17 2022" -A x64 -DDEP_DEBUG=OFF
+          cmake .. -G "Visual Studio 17 2022" -A x64 -DDEP_DEBUG=OFF -DCMAKE_POLICY_VERSION_MINIMUM=3.5
           cmake --build . --config Release
+
+      - name: Save dependency cache
+        # Save even when the app configure/build below fails, so iterating
+        # on application-level errors does not rebuild the deps every time.
+        if: always() && steps.cache-deps.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: deps/build/destdir
+          key: deps-win64-vs2022-${{ hashFiles('deps/CMakeLists.txt', 'deps/**/*.cmake') }}
 
       - name: Configure PrusaSlicer
         shell: cmd
         run: |
           mkdir build
           cd build
-          cmake .. -G "Visual Studio 17 2022" -A x64 -DCMAKE_PREFIX_PATH=%GITHUB_WORKSPACE%\deps\build\destdir\usr\local
+          cmake .. -G "Visual Studio 17 2022" -A x64 -DCMAKE_PREFIX_PATH=%GITHUB_WORKSPACE%\deps\build\destdir\usr\local -DCMAKE_POLICY_VERSION_MINIMUM=3.5
 
       - name: Build PrusaSlicer
         shell: cmd
